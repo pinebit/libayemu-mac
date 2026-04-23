@@ -302,7 +302,8 @@ void play (const char *filename)
 
   size_t pos;
 
-  for (pos = 0; pos < vtx->frames; pos++) {
+  for (pos = 0; pos < vtx->frames && !stop_requested; pos++) {
+    poll_esc();
     ayemu_vtx_getframe (vtx, pos, regs);
     ayemu_set_regs (&ay, regs);
     ayemu_gen_sound (&ay, audio_buf, audio_bufsize);
