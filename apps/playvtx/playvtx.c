@@ -406,6 +406,7 @@ int main (int argc, char **argv)
 #else
     play(argv[index]);
 #endif
+    if (stop_requested) break;
   }
 
   return 0;
