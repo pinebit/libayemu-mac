@@ -263,7 +263,11 @@ static void play_coreaudio(const char *filename)
   s = AudioQueueStart(q, NULL);
   if (s != noErr) ca_die("AudioQueueStart", s);
 
-  dispatch_semaphore_wait(ctx.done, DISPATCH_TIME_FOREVER);
+  while (!stop_requested &&
+         dispatch_semaphore_wait(ctx.done,
+             dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_MSEC)) != 0) {
+    poll_esc();
+  }
 
   AudioQueueStop(q, true);
   AudioQueueDispose(q, true);
