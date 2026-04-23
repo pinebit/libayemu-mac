@@ -383,6 +383,9 @@ int main (int argc, char **argv)
     init_oss();  /* CoreAudio setup is per-file on macOS, no shared init */
 #endif
 
+  if (!sflag)
+    term_raw_enable();
+
   if (DEBUG)
     printf ("OSS sound system initialization success: bits=%d, chans=%d, freq=%d\n",
 	    bits, chans, freq);
