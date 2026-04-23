@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <ctype.h>
 #include <string.h>
 #include <errno.h>
@@ -127,6 +128,33 @@ static void poll_esc(void)
     stop_requested = 1;
 }
 
+static const char *note_names[12] = {
+  "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B "
+};
+
+static void fmt_note(int period, int chip_freq, int disabled, char *out)
+{
+  if (disabled || period <= 0) { strcpy(out, "---"); return; }
+  double hz = chip_freq / (16.0 * period);
+  int midi = (int)round(12.0 * log2(hz / 440.0)) + 69;
+  if (midi < 0 || midi > 127) { strcpy(out, "---"); return; }
+  sprintf(out, "%s%d", note_names[midi % 12], midi / 12 - 1);
+}
+
+static void print_status(size_t pos, const ayemu_vtx_t *vtx)
+{
+  if (qflag) return;
+  char na[8], nb[8], nc[8];
+  fmt_note(ay.regs.tone_a, vtx->chipFreq, ay.regs.R7_tone_a, na);
+  fmt_note(ay.regs.tone_b, vtx->chipFreq, ay.regs.R7_tone_b, nb);
+  fmt_note(ay.regs.tone_c, vtx->chipFreq, ay.regs.R7_tone_c, nc);
+  int e = (int)(pos / vtx->playerFreq);
+  int t = (int)(vtx->frames / vtx->playerFreq);
+  fprintf(stderr, "\r[%02d:%02d/%02d:%02d]  A:%-4s v%-2d  B:%-4s v%-2d  C:%-4s v%-2d",
+          e / 60, e % 60, t / 60, t % 60,
+          na, ay.regs.vol_a, nb, ay.regs.vol_b, nc, ay.regs.vol_c);
+}
+
 #if !defined(__APPLE__)
 void init_oss()
 {
@@ -179,8 +207,10 @@ static void ca_die(const char *call, OSStatus status)
 
 static void ca_fill_buffer(ca_ctx_t *ctx, AudioQueueBufferRef buf)
 {
-  ayemu_vtx_getframe(ctx->vtx, ctx->frame_pos++, regs);
+  size_t pos = ctx->frame_pos++;
+  ayemu_vtx_getframe(ctx->vtx, pos, regs);
   ayemu_set_regs(&ay, regs);
+  print_status(pos, ctx->vtx);
   ayemu_gen_sound(&ay, buf->mAudioData, ctx->bytes_per_buffer);
   buf->mAudioDataByteSize = ctx->bytes_per_buffer;
 }
@@ -272,6 +302,7 @@ static void play_coreaudio(const char *filename)
   AudioQueueStop(q, true);
   AudioQueueDispose(q, true);
   dispatch_release(ctx.done);
+  if (!qflag) fprintf(stderr, "\n");
 
   ayemu_vtx_free(vtx);
 }
@@ -310,12 +341,14 @@ void play (const char *filename)
     poll_esc();
     ayemu_vtx_getframe (vtx, pos, regs);
     ayemu_set_regs (&ay, regs);
+    print_status(pos, vtx);
     ayemu_gen_sound (&ay, audio_buf, audio_bufsize);
     if ((len = write(audio_fd, audio_buf, audio_bufsize)) == -1) {
       fprintf (stderr, "Error writting to sound device, break.\n");
       break;
     }
   }
+  if (!qflag) fprintf(stderr, "\n");
 
  free_vtx:
   ayemu_vtx_free(vtx);
