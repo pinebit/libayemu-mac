@@ -262,9 +262,9 @@ void play (const char *filename)
   else
     ayemu_set_chip_freq(&ay, 3500000); // in Taganrog AY freq got from the same pin as for Z80 CPU
 
-  size_t pos = 0;
+  size_t pos;
 
-  while (pos++ < vtx->frames) {
+  for (pos = 0; pos < vtx->frames; pos++) {
     ayemu_vtx_getframe (vtx, pos, regs);
     ayemu_set_regs (&ay, regs);
     ayemu_gen_sound (&ay, audio_buf, audio_bufsize);
