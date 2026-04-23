@@ -1,88 +1,54 @@
+# AY/YM sound co-processor emulation library — macOS port
 
-# AY/YM sound co-processor emulation library.
+This is a macOS fork of [asashnov/libayemu](https://github.com/asashnov/libayemu)
+adding native CoreAudio output to `playvtx` so `.vtx` files play directly on
+macOS without OSS wrappers.
 
-  This is the AY/YM sound chip emulator. These chips was used in such
-computers as Sinclair ZX Spectrum 128Kb(AY8912), Atari and some others.
+## About
 
-  This library allows you to use AY/YM sound effects and music in your own
-programms, games, demos, etc.
+The AY-3-8910 / YM2149 sound chip was used in the Sinclair ZX Spectrum 128K,
+Atari ST and several other home computers of the 1980s. This library emulates
+it, and `playvtx` plays songs in the `.vtx` file format — a compact register
+dump used widely in the ZX Spectrum music scene.
 
-Library has simple API which is documented with Doxygen.
-You will also find VTX file description inside.
+## macOS install
 
-[Downloads](https://sourceforge.net/projects/libayemu/files/)
+One-time prerequisites:
 
-[Homepage](https://asashnov.github.io/libayemu.html)
+    xcode-select --install
+    brew install autoconf automake libtool
 
-There are thousands songs from games, magazines, demos
-are available from on the Internet.
+Build and install:
 
-## DeadBeef
+    make -f Makefile.macos install
 
-This code also is a part of a standard plugins pack in DeadBeef music player:
+Remove:
 
-https://deadbeef.sourceforge.io/
+    make -f Makefile.macos uninstall
 
-Check it out!
+The default install prefix is `/opt/homebrew` (Apple Silicon Homebrew).
+On Intel Macs with Homebrew under `/usr/local`, run:
 
+    make -f Makefile.macos PREFIX=/usr/local install
 
-## Compiling the sources, testing
+## Play
 
-$ ./bootstrap
+    playvtx music_sample/ritm-4.vtx
 
-$ ./configure
+Multiple files play in sequence:
 
-$ make
+    playvtx music_sample/*.vtx
 
-$ aoss ./test/test
+Dump raw PCM to stdout (for piping to `sox`, `ffmpeg`, etc.):
 
-$ aoss ./apps/playvtx/playvtx music_sample/ritm-4.vtx
+    playvtx -s music_sample/secret.vtx | sox -t raw -r 44100 -e signed -b 16 -c 2 - secret.wav
 
+## Upstream
 
+The underlying library builds on Linux too. The upstream project ships
+XMMS and GStreamer plugins and has historical context about the VTX
+format. See [asashnov/libayemu](https://github.com/asashnov/libayemu).
 
-## Using the library
+## License
 
-You can get some examples of using this library:
-
-* custom register data set: test/test.c in source code;
-* playvtx (console player)
-* xmms-vtx (xmms input plugin)
-* gstreamer-vtx (gstreamer plugin)
-* DeadBeef music player
-
-
-### How to build
-
-Requires: automake-1.10, autoconf-2.61, libtool-1.5, cvs2cl
-
-$ git clone git@github.com:asashnov/libayemu.git
-$ cd libayemu
-$ sh bootstrap
-$ ./configure
-$ make
-$ sudo make install
-
-
-### Links
-
-[AY-3-8910 wiki page](https://ru.wikipedia.org/wiki/AY-3-8910)
-
-[AY-3-8910, AY-3-8912, YM2149 Homepage](http://bulba.untergrund.net/)
-
-[AyEmul from Bulba](http://bulba.untergrund.net/emulator_e.htm)
-
-[AYFly](http://code.google.com/p/ayfly) - (unavailable now)
-Available platforms: Android, Windows, MacOS_X, Linux, Raspberry_Pi.
-
-[ZX Tune cross-platform player](http://zxtune.bitbucket.org/)
-Available platforms: Android, Windows, MacOS_X, Linux, Raspberry_Pi.
-
-[ZX-Spectrum sound kit](https://sourceforge.net/projects/zxssk/)
-Project core is fast and accurate resampler, based on FIR-filter,
-heavily optimized for piecewise-constant functions.
-Above this is clock-precise AY-3-8910 (YM2149F) emulator.
-Front-ends are win32 console app, Winamp and GSPlayer plugins.
-
-[Music archive at Bulba's page](http://bulba.untergrund.net/music_e.htm)
-
-[ZXTUNES — World's largest ZX Spectrum music collection](http://zxtunes.com/)
+GNU GPL v2. See `COPYING`.

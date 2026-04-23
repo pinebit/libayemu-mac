@@ -3,6 +3,13 @@ AC_INIT([libayemu], [1.1.0])
 AM_CONFIG_HEADER(config.h)
 AM_INIT_AUTOMAKE
 
+AC_CANONICAL_HOST
+case "$host_os" in
+  darwin*) host_is_darwin=yes ;;
+  *)       host_is_darwin=no  ;;
+esac
+AM_CONDITIONAL([HOST_DARWIN], [test "x$host_is_darwin" = "xyes"])
+
 # Options
 # AC_ARG_ENABLE
 

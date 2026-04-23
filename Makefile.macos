@@ -1,0 +1,41 @@
+# Convenience wrapper for building libayemu-mac on macOS.
+# For the canonical autotools flow, see INSTALL.
+
+PREFIX ?= /opt/homebrew
+CONFIGURE_FLAGS ?= --disable-tests --prefix=$(PREFIX)
+
+.PHONY: all bootstrap configure build install uninstall clean distclean help
+
+all: build
+
+bootstrap:
+	glibtoolize
+	aclocal
+	autoconf
+	autoheader
+	automake --add-missing --include-deps --copy
+
+configure: bootstrap
+	./configure $(CONFIGURE_FLAGS)
+
+build: configure
+	$(MAKE)
+
+install: build
+	sudo $(MAKE) install
+
+uninstall:
+	sudo $(MAKE) uninstall
+
+clean:
+	-$(MAKE) clean
+
+distclean:
+	-$(MAKE) distclean
+	rm -f aclocal.m4 config.guess config.sub config.h.in configure \
+	      depcomp install-sh ltmain.sh missing compile
+	rm -rf autom4te.cache
+
+help:
+	@echo "Targets: all bootstrap configure build install uninstall clean distclean"
+	@echo "Vars: PREFIX (default $(PREFIX)), CONFIGURE_FLAGS (default $(CONFIGURE_FLAGS))"

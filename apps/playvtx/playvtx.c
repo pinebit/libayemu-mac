@@ -26,7 +26,9 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
+#if !defined(__APPLE__)
 #include <sys/soundcard.h>
+#endif
 
 #include "ayemu.h"
 #include "config.h"
@@ -87,6 +89,7 @@ void usage ()
 	   );
 }
 
+#if !defined(__APPLE__)
 void init_oss()
 {
   if ((audio_fd = open(DEVICE_NAME, O_WRONLY, 0)) == -1) {
@@ -116,6 +119,121 @@ void init_oss()
 
   exit(1);
 }
+#endif /* !__APPLE__ */
+
+#ifdef __APPLE__
+#include <AudioToolbox/AudioToolbox.h>
+#include <dispatch/dispatch.h>
+
+typedef struct {
+    ayemu_vtx_t         *vtx;
+    size_t               frame_pos;     /* next frame index to render */
+    dispatch_semaphore_t done;          /* signaled when last buffer finishes */
+    int                  inflight;      /* buffers currently enqueued */
+    int                  bytes_per_buffer;
+} ca_ctx_t;
+
+static void ca_die(const char *call, OSStatus status)
+{
+  fprintf(stderr, "CoreAudio error %s: %d\n", call, (int)status);
+  exit(1);
+}
+
+static void ca_fill_buffer(ca_ctx_t *ctx, AudioQueueBufferRef buf)
+{
+  ayemu_vtx_getframe(ctx->vtx, ctx->frame_pos++, regs);
+  ayemu_set_regs(&ay, regs);
+  ayemu_gen_sound(&ay, buf->mAudioData, ctx->bytes_per_buffer);
+  buf->mAudioDataByteSize = ctx->bytes_per_buffer;
+}
+
+static void ca_callback(void *user, AudioQueueRef q, AudioQueueBufferRef buf)
+{
+  ca_ctx_t *ctx = (ca_ctx_t *)user;
+  if (ctx->frame_pos < ctx->vtx->frames) {
+    ca_fill_buffer(ctx, buf);
+    OSStatus s = AudioQueueEnqueueBuffer(q, buf, 0, NULL);
+    if (s != noErr) ca_die("AudioQueueEnqueueBuffer (callback)", s);
+  } else {
+    if (--ctx->inflight == 0) {
+      dispatch_semaphore_signal(ctx->done);
+    }
+  }
+}
+
+static void play_coreaudio(const char *filename)
+{
+  ayemu_vtx_t *vtx;
+  AudioQueueRef q;
+  AudioQueueBufferRef bufs[3];
+  ca_ctx_t ctx;
+  AudioStreamBasicDescription asbd;
+  OSStatus s;
+  int n_buffers;
+  int i;
+
+  vtx = ayemu_vtx_load_from_file(filename);
+  if (!vtx) return;
+
+  if (!qflag)
+    printf(" Title: %s\n Author: %s\n From: %s\n Comment: %s\n Year: %d\n",
+           vtx->title, vtx->author, vtx->from, vtx->comment, vtx->year);
+
+  if (vtx->frames == 0) {
+    ayemu_vtx_free(vtx);
+    return;
+  }
+
+  ayemu_reset(&ay);
+  ayemu_set_chip_type(&ay, vtx->chiptype, NULL);
+  ayemu_set_stereo(&ay, vtx->stereo, NULL);
+  if (!Tflag)
+    ayemu_set_chip_freq(&ay, vtx->chipFreq);
+  else
+    ayemu_set_chip_freq(&ay, 3500000);
+
+  memset(&asbd, 0, sizeof(asbd));
+  asbd.mSampleRate       = freq;
+  asbd.mFormatID         = kAudioFormatLinearPCM;
+  asbd.mFormatFlags      = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+  asbd.mFramesPerPacket  = 1;
+  asbd.mChannelsPerFrame = chans;
+  asbd.mBitsPerChannel   = bits;
+  asbd.mBytesPerFrame    = chans * (bits >> 3);
+  asbd.mBytesPerPacket   = asbd.mBytesPerFrame;
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.vtx              = vtx;
+  ctx.frame_pos        = 0;
+  ctx.done             = dispatch_semaphore_create(0);
+  ctx.bytes_per_buffer = asbd.mBytesPerFrame * (freq / vtx->playerFreq);
+
+  n_buffers = (vtx->frames < 3) ? (int)vtx->frames : 3;
+  ctx.inflight = n_buffers;
+
+  s = AudioQueueNewOutput(&asbd, ca_callback, &ctx, NULL, NULL, 0, &q);
+  if (s != noErr) ca_die("AudioQueueNewOutput", s);
+
+  for (i = 0; i < n_buffers; i++) {
+    s = AudioQueueAllocateBuffer(q, ctx.bytes_per_buffer, &bufs[i]);
+    if (s != noErr) ca_die("AudioQueueAllocateBuffer", s);
+    ca_fill_buffer(&ctx, bufs[i]);
+    s = AudioQueueEnqueueBuffer(q, bufs[i], 0, NULL);
+    if (s != noErr) ca_die("AudioQueueEnqueueBuffer (prime)", s);
+  }
+
+  s = AudioQueueStart(q, NULL);
+  if (s != noErr) ca_die("AudioQueueStart", s);
+
+  dispatch_semaphore_wait(ctx.done, DISPATCH_TIME_FOREVER);
+
+  AudioQueueStop(q, true);
+  AudioQueueDispose(q, true);
+  dispatch_release(ctx.done);
+
+  ayemu_vtx_free(vtx);
+}
+#endif /* __APPLE__ */
 
 void play (const char *filename)
 {
@@ -144,9 +262,9 @@ void play (const char *filename)
   else
     ayemu_set_chip_freq(&ay, 3500000); // in Taganrog AY freq got from the same pin as for Z80 CPU
 
-  size_t pos = 0;
+  size_t pos;
 
-  while (pos++ < vtx->frames) {
+  for (pos = 0; pos < vtx->frames; pos++) {
     ayemu_vtx_getframe (vtx, pos, regs);
     ayemu_set_regs (&ay, regs);
     ayemu_gen_sound (&ay, audio_buf, audio_bufsize);
@@ -222,8 +340,10 @@ int main (int argc, char **argv)
     exit (1);
   }
 
+#if !defined(__APPLE__)
   if (! sflag)
-    init_oss();
+    init_oss();  /* CoreAudio setup is per-file on macOS, no shared init */
+#endif
 
   if (DEBUG)
     printf ("OSS sound system initialization success: bits=%d, chans=%d, freq=%d\n",
@@ -234,7 +354,12 @@ int main (int argc, char **argv)
 
   for (index = optind; index < argc; index++) {
     printf ("\nPlaying file %s\n", argv[index]);
-    play (argv[index]);
+#ifdef __APPLE__
+    if (!sflag) play_coreaudio(argv[index]);
+    else        play(argv[index]);
+#else
+    play(argv[index]);
+#endif
   }
 
   return 0;
