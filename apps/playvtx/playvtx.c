@@ -188,7 +188,7 @@ static void ca_fill_buffer(ca_ctx_t *ctx, AudioQueueBufferRef buf)
 static void ca_callback(void *user, AudioQueueRef q, AudioQueueBufferRef buf)
 {
   ca_ctx_t *ctx = (ca_ctx_t *)user;
-  if (ctx->frame_pos < ctx->vtx->frames) {
+  if (ctx->frame_pos < ctx->vtx->frames && !stop_requested) {
     ca_fill_buffer(ctx, buf);
     OSStatus s = AudioQueueEnqueueBuffer(q, buf, 0, NULL);
     if (s != noErr) ca_die("AudioQueueEnqueueBuffer (callback)", s);
