@@ -1,8 +1,14 @@
+# macOS
+.DS_Store
+
+# Editor backups
+*~
+
 *.o
 *.lo
 *.la
-.deps
-.libs
+.deps/
+.libs/
 autom4te.cache
 README
 ChangeLog
