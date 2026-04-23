@@ -26,6 +26,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <termios.h>
 #if !defined(__APPLE__)
 #include <sys/soundcard.h>
 #endif
@@ -57,6 +58,11 @@ int Tflag = 0;  // Taganrog, 3.5 MHz
 int sflag = 0;  // to stdout
 int vflag = 0;  // verbose
 
+static volatile int stop_requested = 0;
+
+static struct termios saved_termios;
+static int term_is_raw = 0;
+
 ayemu_ay_t ay;
 ayemu_ay_reg_frame_t regs;
 
@@ -87,6 +93,38 @@ void usage ()
 	   "  -h --help\n"
 	   "  -u --usage\tthis help\n"
 	   );
+}
+
+static void term_restore(void)
+{
+  if (!term_is_raw) return;
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &saved_termios);
+  int flags = fcntl(STDIN_FILENO, F_GETFL);
+  fcntl(STDIN_FILENO, F_SETFL, flags & ~O_NONBLOCK);
+  term_is_raw = 0;
+}
+
+static void term_raw_enable(void)
+{
+  struct termios raw;
+  tcgetattr(STDIN_FILENO, &saved_termios);
+  atexit(term_restore);
+  raw = saved_termios;
+  raw.c_lflag &= ~(ICANON | ECHO);
+  raw.c_cc[VMIN]  = 0;
+  raw.c_cc[VTIME] = 0;
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  int flags = fcntl(STDIN_FILENO, F_GETFL);
+  fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+  term_is_raw = 1;
+}
+
+static void poll_esc(void)
+{
+  if (!term_is_raw) return;
+  char c;
+  if (read(STDIN_FILENO, &c, 1) == 1 && c == 0x1B)
+    stop_requested = 1;
 }
 
 #if !defined(__APPLE__)
